@@ -100,7 +100,7 @@ void sort_timer_lst::tick()
         return;
     }
     
-    time_t cur = time(NULL);
+    time_t cur = time(NULL);  //cur就是现在的绝对时间
     util_timer *tmp = head;
     while (tmp)
     {
@@ -154,14 +154,13 @@ void Utils::init(int timeslot)
 int Utils::setnonblocking(int fd)
 {
     int old_option = fcntl(fd, F_GETFL);
-    int new_option = old_option | O_NONBLOCK;
+    int new_option = old_option | O_NONBLOCK;  //按位或，只追加功能不覆盖全部
     fcntl(fd, F_SETFL, new_option);
     return old_option;
 }
 
 //将内核事件表注册读事件，ET模式，选择开启EPOLLONESHOT
-void Utils::addfd(int epollfd, int fd, bool one_shot, int TRIGMode)
-{
+void Utils::addfd(int epollfd, int fd, bool one_shot, int TRIGMode) {
     epoll_event event;
     event.data.fd = fd;
 
@@ -169,18 +168,18 @@ void Utils::addfd(int epollfd, int fd, bool one_shot, int TRIGMode)
         event.events = EPOLLIN | EPOLLET | EPOLLRDHUP;
     else
         event.events = EPOLLIN | EPOLLRDHUP;
-
+        
     if (one_shot)
         event.events |= EPOLLONESHOT;
     epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &event);
     setnonblocking(fd);
 }
 
-//信号处理函数
+//信号处理函数（把中断信号当成普通信号排队处理，避免影响主程序运行）
 void Utils::sig_handler(int sig)
 {
     //为保证函数的可重入性，保留原来的errno
-    int save_errno = errno;
+    int save_errno = errno;  //把当前全局错误码存起来
     int msg = sig;
     send(u_pipefd[1], (char *)&msg, 1, 0);
     errno = save_errno;
@@ -192,17 +191,17 @@ void Utils::addsig(int sig, void(handler)(int), bool restart)
     struct sigaction sa;
     memset(&sa, '\0', sizeof(sa));
     sa.sa_handler = handler;
-    if (restart)
+    if (restart)  // 决定是否开启“自动重启”
         sa.sa_flags |= SA_RESTART;
-    sigfillset(&sa.sa_mask);
-    assert(sigaction(sig, &sa, NULL) != -1);
+    sigfillset(&sa.sa_mask);  //在执行这个信号处理函数期间，屏蔽掉（暂时阻塞）其他所有的信号。
+    assert(sigaction(sig, &sa, NULL) != -1);  //进行注册，如果注册失败直接让程序挂掉并报错。
 }
 
 //定时处理任务，重新定时以不断触发SIGALRM信号
 void Utils::timer_handler()
 {
     m_timer_lst.tick();
-    alarm(m_TIMESLOT);
+    alarm(m_TIMESLOT);  //m_TIMESLOT秒后触发SIGALRM信号，调用定时处理任务
 }
 
 void Utils::show_error(int connfd, const char *info)
@@ -217,8 +216,8 @@ int Utils::u_epollfd = 0;
 class Utils;
 void cb_func(client_data *user_data)
 {
-    epoll_ctl(Utils::u_epollfd, EPOLL_CTL_DEL, user_data->sockfd, 0);
-    assert(user_data);
-    close(user_data->sockfd);
-    http_conn::m_user_count--;
+    epoll_ctl(Utils::u_epollfd, EPOLL_CTL_DEL, user_data->sockfd, 0);  //执行删除列表位置
+    assert(user_data);  //安全检查
+    close(user_data->sockfd);  //关闭任务嵌套字
+    http_conn::m_user_count--;  //更新计数器
 }

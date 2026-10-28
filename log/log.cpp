@@ -28,8 +28,8 @@ bool Log::init(const char *file_name, int close_log, int log_buf_size, int split
         m_is_async = true;
         m_log_queue = new block_queue<string>(max_queue_size);
         pthread_t tid;
-        //flush_log_thread为回调函数,这里表示创建线程异步写日志
-        pthread_create(&tid, NULL, flush_log_thread, NULL);
+        //flush_log_thread为回调函数（自己写的）,这里表示创建线程异步写日志
+        pthread_create(&tid, NULL, flush_log_thread, NULL);// 创建消费者线程
     }
     
     m_close_log = close_log;
@@ -43,15 +43,16 @@ bool Log::init(const char *file_name, int close_log, int log_buf_size, int split
     struct tm my_tm = *sys_tm;
 
  
-    const char *p = strrchr(file_name, '/');
+    const char *p = strrchr(file_name, '/');// 从右往左找最后一个 '/'
     char log_full_name[256] = {0};
 
     if (p == NULL)
     {
+        // 情况1：传入的是 "server.log"，没有路径，直接写
         snprintf(log_full_name, 255, "%d_%02d_%02d_%s", my_tm.tm_year + 1900, my_tm.tm_mon + 1, my_tm.tm_mday, file_name);
     }
     else
-    {
+    {// 情况2：传入的是 "/var/log/server.log"
         strcpy(log_name, p + 1);
         strncpy(dir_name, file_name, p - file_name + 1);
         snprintf(log_full_name, 255, "%s%d_%02d_%02d_%s", dir_name, my_tm.tm_year + 1900, my_tm.tm_mon + 1, my_tm.tm_mday, log_name);
@@ -71,15 +72,15 @@ bool Log::init(const char *file_name, int close_log, int log_buf_size, int split
 void Log::write_log(int level, const char *format, ...)
 {
     struct timeval now = {0, 0};
-    gettimeofday(&now, NULL);
+    gettimeofday(&now, NULL);  // 获取微秒级时间
     time_t t = now.tv_sec;
-    struct tm *sys_tm = localtime(&t);
+    struct tm *sys_tm = localtime(&t);  // 转为本地日期结构
     struct tm my_tm = *sys_tm;
-    char s[16] = {0};
+    char s[16] = {0};     // 根据 level 填入 [debug]/[info] 等标签
     switch (level)
     {
     case 0:
-        strcpy(s, "[debug]:");
+        strcpy(s, "[debug]:");  //copy
         break;
     case 1:
         strcpy(s, "[info]:");
@@ -95,9 +96,9 @@ void Log::write_log(int level, const char *format, ...)
         break;
     }
     //写入一个log，对m_count++, m_split_lines最大行数
-    m_mutex.lock();
+    m_mutex.lock();    // 加锁保护 m_fp, m_count, m_today
     m_count++;
-
+    // 触发翻页条件：日期变了 OR 行数达到上限 (m_split_lines)
     if (m_today != my_tm.tm_mday || m_count % m_split_lines == 0) //everyday log
     {
         
@@ -108,13 +109,13 @@ void Log::write_log(int level, const char *format, ...)
        
         snprintf(tail, 16, "%d_%02d_%02d_", my_tm.tm_year + 1900, my_tm.tm_mon + 1, my_tm.tm_mday);
        
-        if (m_today != my_tm.tm_mday)
+        if (m_today != my_tm.tm_mday)   // 情况A：跨天了
         {
             snprintf(new_log, 255, "%s%s%s", dir_name, tail, log_name);
             m_today = my_tm.tm_mday;
-            m_count = 0;
+            m_count = 0;    // 新的一天，计数重置为0
         }
-        else
+        else    // 情况B：当前天写满了（比如写了100万行），直接写进文件，不异步进队列
         {
             snprintf(new_log, 255, "%s%s%s.%lld", dir_name, tail, log_name, m_count / m_split_lines);
         }
@@ -123,11 +124,12 @@ void Log::write_log(int level, const char *format, ...)
  
     m_mutex.unlock();
 
+    //格式化日志内容
     va_list valst;
     va_start(valst, format);
 
     string log_str;
-    m_mutex.lock();
+    m_mutex.lock();     // ② 加锁保护 m_buf 这个字符数组
 
     //写入的具体时间内容格式
     int n = snprintf(m_buf, 48, "%d-%02d-%02d %02d:%02d:%02d.%06ld %s ",

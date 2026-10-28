@@ -26,8 +26,7 @@
 
 class util_timer;
 
-struct client_data
-{
+struct client_data {
     sockaddr_in address;
     int sockfd;
     util_timer *timer;
@@ -37,6 +36,9 @@ class util_timer
 {
 public:
     util_timer() : prev(NULL), next(NULL) {}
+    //等价于 util_timer() {
+    // prev = NULL;
+    // next = NULL; }
 
 public:
     time_t expire;
@@ -54,9 +56,9 @@ public:
     ~sort_timer_lst();
 
     void add_timer(util_timer *timer);
-    void adjust_timer(util_timer *timer);
+    void adjust_timer(util_timer *timer);  //timer发生改变重新调整
     void del_timer(util_timer *timer);
-    void tick();
+    void tick();  //检查链表有谁超时了
 
 private:
     void add_timer(util_timer *timer, util_timer *lst_head);
@@ -65,8 +67,7 @@ private:
     util_timer *tail;
 };
 
-class Utils
-{
+class Utils {
 public:
     Utils() {}
     ~Utils() {}
@@ -94,7 +95,7 @@ public:
     static int *u_pipefd;
     sort_timer_lst m_timer_lst;
     static int u_epollfd;
-    int m_TIMESLOT;
+    int m_TIMESLOT;  //自动触发检查的时间
 };
 
 void cb_func(client_data *user_data);

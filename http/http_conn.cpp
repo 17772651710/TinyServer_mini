@@ -17,34 +17,34 @@ const char *error_500_form = "There was an unusual problem serving the request f
 locker m_lock;
 map<string, string> users;
 
-void http_conn::initmysql_result(connection_pool *connPool)
-{
-    //先从连接池中取一个连接
+void http_conn::initmysql_result(connection_pool *connPool){
     MYSQL *mysql = NULL;
     connectionRAII mysqlcon(&mysql, connPool);
 
-    //在user表中检索username，passwd数据，浏览器端输入
-    if (mysql_query(mysql, "SELECT username,passwd FROM user"))
-    {
+    if (mysql_query(mysql, "SELECT username,passwd FROM user")) {
         LOG_ERROR("SELECT error:%s\n", mysql_error(mysql));
+        return; // 查询失败直接返回
     }
 
-    //从表中检索完整的结果集
     MYSQL_RES *result = mysql_store_result(mysql);
+    // 【修复点1】检查结果集是否为空
+    if (!result) {
+        LOG_ERROR("mysql_store_result error!\n");
+        return;
+    }
 
-    //返回结果集中的列数
-    int num_fields = mysql_num_fields(result);
+    // 下面的 num_fields 和 fields 如果是废代码，可以删掉，或者保留作为校验
+    int num_fields = mysql_num_fields(result); 
+    MYSQL_FIELD *fields = mysql_fetch_fields(result); 
 
-    //返回所有字段结构的数组
-    MYSQL_FIELD *fields = mysql_fetch_fields(result);
-
-    //从结果集中获取下一行，将对应的用户名和密码，存入map中
-    while (MYSQL_ROW row = mysql_fetch_row(result))
-    {
+    while (MYSQL_ROW row = mysql_fetch_row(result)) {
         string temp1(row[0]);
         string temp2(row[1]);
         users[temp1] = temp2;
     }
+
+    // 【修复点2】释放结果集内存（必须！）
+    mysql_free_result(result); 
 }
 
 //对文件描述符设置非阻塞
@@ -120,9 +120,9 @@ void http_conn::init(int sockfd, const sockaddr_in &addr, char *root, int TRIGMo
     m_user_count++;
 
     //当浏览器出现连接重置时，可能是网站根目录出错或http响应格式出错或者访问的文件中内容完全为空
-    doc_root = root;
-    m_TRIGMode = TRIGMode;
-    m_close_log = close_log;
+    doc_root = root;  //绝对路径的头
+    m_TRIGMode = TRIGMode;  //触发方式（边缘/水平）
+    m_close_log = close_log;  //是否开启日志
 
     strcpy(sql_user, user.c_str());
     strcpy(sql_passwd, passwd.c_str());
@@ -327,8 +327,7 @@ http_conn::HTTP_CODE http_conn::parse_headers(char *text)
 }
 
 //判断http请求是否被完整读入
-http_conn::HTTP_CODE http_conn::parse_content(char *text)
-{
+http_conn::HTTP_CODE http_conn::parse_content(char *text){
     if (m_read_idx >= (m_content_length + m_checked_idx))
     {
         text[m_content_length] = '\0';
@@ -352,16 +351,16 @@ http_conn::HTTP_CODE http_conn::process_read()
         LOG_INFO("%s", text);
         switch (m_check_state)
         {
-        case CHECK_STATE_REQUESTLINE:
+        case CHECK_STATE_REQUESTLINE:  //解析请求行
         {
-            ret = parse_request_line(text);
+            ret = parse_request_line(text);//1
             if (ret == BAD_REQUEST)
                 return BAD_REQUEST;
             break;
         }
-        case CHECK_STATE_HEADER:
+        case CHECK_STATE_HEADER:  //解析请求头
         {
-            ret = parse_headers(text);
+            ret = parse_headers(text);//1
             if (ret == BAD_REQUEST)
                 return BAD_REQUEST;
             else if (ret == GET_REQUEST)
@@ -370,7 +369,7 @@ http_conn::HTTP_CODE http_conn::process_read()
             }
             break;
         }
-        case CHECK_STATE_CONTENT:
+        case CHECK_STATE_CONTENT:  //解析请求体
         {
             ret = parse_content(text);
             if (ret == GET_REQUEST)
@@ -390,7 +389,7 @@ http_conn::HTTP_CODE http_conn::do_request()
     strcpy(m_real_file, doc_root);
     int len = strlen(doc_root);
     //printf("m_url:%s\n", m_url);
-    const char *p = strrchr(m_url, '/');
+    const char *p = strrchr(m_url, '/');  //m_url存的是http请求行 ./index.html
 
     //处理cgi
     if (cgi == 1 && (*(p + 1) == '2' || *(p + 1) == '3'))
@@ -509,12 +508,11 @@ http_conn::HTTP_CODE http_conn::do_request()
         return BAD_REQUEST;
 
     int fd = open(m_real_file, O_RDONLY);
-    m_file_address = (char *)mmap(0, m_file_stat.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+    m_file_address = (char *)mmap(0, m_file_stat.st_size, PROT_READ, MAP_PRIVATE, fd, 0);//增加虚拟内存映射关系
     close(fd);
     return FILE_REQUEST;
 }
-void http_conn::unmap()
-{
+void http_conn::unmap(){  //解除虚拟内存映射关系
     if (m_file_address)
     {
         munmap(m_file_address, m_file_stat.st_size);
@@ -525,18 +523,19 @@ bool http_conn::write()
 {
     int temp = 0;
 
-    if (bytes_to_send == 0)
+    if (bytes_to_send == 0) //报文为null，一般不会出现
     {
         modfd(m_epollfd, m_sockfd, EPOLLIN, m_TRIGMode);
         init();
         return true;
     }
 
+
     while (1)
     {
         temp = writev(m_sockfd, m_iv, m_iv_count);
 
-        if (temp < 0)
+        if (temp <= 0)
         {
             if (errno == EAGAIN)
             {
@@ -547,18 +546,19 @@ bool http_conn::write()
             return false;
         }
 
-        bytes_have_send += temp;
-        bytes_to_send -= temp;
-        if (bytes_have_send >= m_iv[0].iov_len)
+        bytes_have_send += temp;  //发送过的
+        bytes_to_send -= temp;  //剩余未发送的
+        if (bytes_have_send >= m_write_idx)
         {
             m_iv[0].iov_len = 0;
+            //计算：新位置=老位置+（信息量 - 缓冲区（响应头））
             m_iv[1].iov_base = m_file_address + (bytes_have_send - m_write_idx);
             m_iv[1].iov_len = bytes_to_send;
         }
         else
         {
             m_iv[0].iov_base = m_write_buf + bytes_have_send;
-            m_iv[0].iov_len = m_iv[0].iov_len - bytes_have_send;
+            m_iv[0].iov_len = m_write_idx - bytes_have_send;
         }
 
         if (bytes_to_send <= 0)
@@ -657,20 +657,19 @@ bool http_conn::process_write(HTTP_CODE ret)
     case FILE_REQUEST:
     {
         add_status_line(200, ok_200_title);
-        if (m_file_stat.st_size != 0)
+        if (m_file_stat.st_size != 0)  //判断读取文件是否为null
         {
             add_headers(m_file_stat.st_size);
-            m_iv[0].iov_base = m_write_buf;
+            m_iv[0].iov_base = m_write_buf;  //内存第一块
             m_iv[0].iov_len = m_write_idx;
-            m_iv[1].iov_base = m_file_address;
+            m_iv[1].iov_base = m_file_address;  //内存第二块
             m_iv[1].iov_len = m_file_stat.st_size;
             m_iv_count = 2;
             bytes_to_send = m_write_idx + m_file_stat.st_size;
             return true;
         }
-        else
-        {
-            const char *ok_string = "<html><body></body></html>";
+        else {
+            const char *ok_string = "<html><body></body></html>";  //返回空架构
             add_headers(strlen(ok_string));
             if (!add_content(ok_string))
                 return false;
@@ -685,18 +684,15 @@ bool http_conn::process_write(HTTP_CODE ret)
     bytes_to_send = m_write_idx;
     return true;
 }
-void http_conn::process()
-{
+void http_conn::process() {
     HTTP_CODE read_ret = process_read();
-    if (read_ret == NO_REQUEST)
-    {
-        modfd(m_epollfd, m_sockfd, EPOLLIN, m_TRIGMode);
+    if (read_ret == NO_REQUEST) {  //数据未读完
+        modfd(m_epollfd, m_sockfd, EPOLLIN, m_TRIGMode);  //监听m_sockfd中是否有事件可读
         return;
     }
     bool write_ret = process_write(read_ret);
-    if (!write_ret)
-    {
+    if (!write_ret) {
         close_conn();
     }
-    modfd(m_epollfd, m_sockfd, EPOLLOUT, m_TRIGMode);
+    modfd(m_epollfd, m_sockfd, EPOLLOUT, m_TRIGMode);  //监听m_sockfd中是否有事件可写
 }

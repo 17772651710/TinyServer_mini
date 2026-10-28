@@ -9,7 +9,7 @@
 #include "../CGImysql/sql_connection_pool.h"
 
 template <typename T>
-class threadpool
+class threadpool  //任务队列
 {
 public:
     /*thread_number是线程池中线程的数量，max_requests是请求队列中最多允许的、等待处理的请求的数量*/
@@ -29,8 +29,8 @@ private:
     pthread_t *m_threads;       //描述线程池的数组，其大小为m_thread_number
     std::list<T *> m_workqueue; //请求队列
     locker m_queuelocker;       //保护请求队列的互斥锁
-    sem m_queuestat;            //是否有任务需要处理
-    connection_pool *m_connPool;  //数据库
+    sem m_queuestat;            
+    connection_pool *m_connPool;  //连接池
     int m_actor_model;          //模型切换
 };
 template <typename T>
@@ -38,12 +38,12 @@ threadpool<T>::threadpool( int actor_model, connection_pool *connPool, int threa
 {
     if (thread_number <= 0 || max_requests <= 0)
         throw std::exception();
-    m_threads = new pthread_t[m_thread_number];
+    m_threads = new pthread_t[m_thread_number];  //为数组m_threads开辟了m_thread_number个堆空间
     if (!m_threads)
         throw std::exception();
     for (int i = 0; i < thread_number; ++i)
     {
-        if (pthread_create(m_threads + i, NULL, worker, this) != 0)
+        if (pthread_create(m_threads + i, NULL, worker, this) != 0)  //创建失败
         {
             delete[] m_threads;
             throw std::exception();
@@ -60,8 +60,8 @@ threadpool<T>::~threadpool()
 {
     delete[] m_threads;
 }
-template <typename T>
-bool threadpool<T>::append(T *request, int state)
+template <typename T>  
+bool threadpool<T>::append(T *request, int state)     // 添加请求任务
 {
     m_queuelocker.lock();
     if (m_workqueue.size() >= m_max_requests)
@@ -69,7 +69,7 @@ bool threadpool<T>::append(T *request, int state)
         m_queuelocker.unlock();
         return false;
     }
-    request->m_state = state;
+    request->m_state = state;  //reactor模式会用到，，确定是读事件还是写事件
     m_workqueue.push_back(request);
     m_queuelocker.unlock();
     m_queuestat.post();
@@ -113,9 +113,9 @@ void threadpool<T>::run()
         m_queuelocker.unlock();
         if (!request)
             continue;
-        if (1 == m_actor_model)
+        if (1 == m_actor_model)    //reactor方式
         {
-            if (0 == request->m_state)
+            if (0 == request->m_state)  //状态0：读
             {
                 if (request->read_once())
                 {
@@ -123,13 +123,13 @@ void threadpool<T>::run()
                     connectionRAII mysqlcon(&request->mysql, m_connPool);
                     request->process();
                 }
-                else
+                else  //读取失败
                 {
                     request->improv = 1;
                     request->timer_flag = 1;
                 }
             }
-            else
+            else    //状态1：写
             {
                 if (request->write())
                 {
@@ -142,7 +142,7 @@ void threadpool<T>::run()
                 }
             }
         }
-        else
+        else  //普通同步模式
         {
             connectionRAII mysqlcon(&request->mysql, m_connPool);
             request->process();

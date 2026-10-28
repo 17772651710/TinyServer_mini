@@ -22,6 +22,7 @@
 #include <getopt.h>
 #include <strings.h>
 #include <time.h>
+#define _XOPEN_SOURCE 500
 #include <signal.h>
 
 /* values */

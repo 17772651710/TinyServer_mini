@@ -32,7 +32,7 @@ public:
     static const int FILENAME_LEN = 200;
     static const int READ_BUFFER_SIZE = 2048;
     static const int WRITE_BUFFER_SIZE = 1024;
-    enum METHOD
+    enum METHOD  //请求方法
     {
         GET = 0,
         POST,
@@ -44,13 +44,13 @@ public:
         CONNECT,
         PATH
     };
-    enum CHECK_STATE
+    enum CHECK_STATE  //主状态机的三种可能状态
     {
         CHECK_STATE_REQUESTLINE = 0,
         CHECK_STATE_HEADER,
         CHECK_STATE_CONTENT
     };
-    enum HTTP_CODE
+    enum HTTP_CODE  //主状态机返回的结果
     {
         NO_REQUEST,
         GET_REQUEST,
@@ -61,7 +61,7 @@ public:
         INTERNAL_ERROR,
         CLOSED_CONNECTION
     };
-    enum LINE_STATUS
+    enum LINE_STATUS  //行的读取状态
     {
         LINE_OK = 0,
         LINE_BAD,
@@ -74,7 +74,7 @@ public:
 
 public:
     void init(int sockfd, const sockaddr_in &addr, char *, int, int, string user, string passwd, string sqlname);
-    void close_conn(bool real_close = true);
+    void close_conn(bool real_close = true);  //关闭连接
     void process();
     bool read_once();
     bool write();
@@ -109,22 +109,22 @@ private:
 
 public:
     static int m_epollfd;
-    static int m_user_count;
+    static int m_user_count;   //当前服务器正在处理的客户端连接总数
     MYSQL *mysql;
     int m_state;  //读为0, 写为1
 
 private:
     int m_sockfd;
     sockaddr_in m_address;
-    char m_read_buf[READ_BUFFER_SIZE];
+    char m_read_buf[READ_BUFFER_SIZE];   //读缓冲区
     long m_read_idx;
     long m_checked_idx;
     int m_start_line;
-    char m_write_buf[WRITE_BUFFER_SIZE];
+    char m_write_buf[WRITE_BUFFER_SIZE];  //写缓冲区
     int m_write_idx;
     CHECK_STATE m_check_state;
     METHOD m_method;
-    char m_real_file[FILENAME_LEN];
+    char m_real_file[FILENAME_LEN];   //文件路径
     char *m_url;
     char *m_version;
     char *m_host;
@@ -136,12 +136,12 @@ private:
     int m_iv_count;
     int cgi;        //是否启用的POST
     char *m_string; //存储请求头数据
-    int bytes_to_send;
-    int bytes_have_send;
-    char *doc_root;
+    int bytes_to_send;  //剩余未发送的字节数
+    int bytes_have_send;  //已发送的字节数
+    char *doc_root;   //Web 根目录的绝对路径（比如 /var/www/html）
 
     map<string, string> m_users;
-    int m_TRIGMode;
+    int m_TRIGMode;   //0 LT（水平触发）  1 ET（边缘触发）
     int m_close_log;
 
     char sql_user[100];

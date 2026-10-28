@@ -23,7 +23,7 @@ public:
         {
             exit(-1);
         }
-
+        
         m_max_size = max_size;
         m_array = new T[max_size];
         m_size = 0;

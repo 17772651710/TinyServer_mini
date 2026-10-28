@@ -4,8 +4,9 @@
 #include <exception>
 #include <pthread.h>
 #include <semaphore.h>
+#include <mutex>
 
-class sem
+class sem     //针对数据库连接池
 {
 public:
     sem()
@@ -38,38 +39,38 @@ public:
 private:
     sem_t m_sem;
 };
-class locker
+
+class locker   //后两个针对线程池
+
 {
+
 public:
-    locker()
-    {
-        if (pthread_mutex_init(&m_mutex, NULL) != 0)
-        {
+    locker(){
+        if (pthread_mutex_init(&m_mutex, NULL) != 0){
             throw std::exception();
         }
     }
-    ~locker()
-    {
+
+    ~locker(){
         pthread_mutex_destroy(&m_mutex);
-    }
-    bool lock()
-    {
-        return pthread_mutex_lock(&m_mutex) == 0;
-    }
-    bool unlock()
-    {
-        return pthread_mutex_unlock(&m_mutex) == 0;
-    }
-    pthread_mutex_t *get()
-    {
-        return &m_mutex;
+
     }
 
+    bool lock(){
+        return pthread_mutex_lock(&m_mutex) == 0;
+    }
+
+    bool unlock(){
+        return pthread_mutex_unlock(&m_mutex) == 0;
+    }
+    pthread_mutex_t *get(){
+        return &m_mutex;
+    }
 private:
     pthread_mutex_t m_mutex;
 };
-class cond
-{
+
+class cond{
 public:
     cond()
     {

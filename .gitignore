@@ -1,0 +1,11 @@
+# 编译产物
+server
+*.o
+*.out
+
+# IDE配置
+.vscode/
+.idea/
+
+# 日志
+*.log
